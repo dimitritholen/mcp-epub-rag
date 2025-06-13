@@ -1,0 +1,39 @@
+{
+  "_comment": "Example configuration for MCP EPUB RAG Server",
+  "_usage": "Use this as a reference when calling the 'configure' tool",
+  
+  "documents": [
+    "./sample-docs/book1.epub",
+    "./sample-docs/research-paper.pdf",
+    "./sample-docs/notes.md",
+    "./sample-docs/manual.docx"
+  ],
+  
+  "vectorDbPath": "./vector-db",
+  
+  "embeddingModel": "Xenova/all-MiniLM-L6-v2",
+  
+  "chunkSize": 512,
+  
+  "chunkOverlap": 50,
+  
+  "maxResults": 10,
+  
+  "_notes": {
+    "embeddingModels": {
+      "fast": "Xenova/all-MiniLM-L6-v2",
+      "balanced": "Xenova/all-mpnet-base-v2",
+      "lightweight": "Xenova/distilbert-base-uncased"
+    },
+    "chunkSizeGuidelines": {
+      "small": "256 - Good for precise search, more chunks",
+      "medium": "512 - Balanced approach (recommended)",
+      "large": "1024 - Better context, fewer chunks"
+    },
+    "overlapGuidelines": {
+      "low": "25 - Minimal overlap",
+      "medium": "50 - Recommended for most cases",
+      "high": "100 - Maximum context preservation"
+    }
+  }
+}
