@@ -3,7 +3,7 @@ import path from 'path';
 import { parse as parseHtml } from 'node-html-parser';
 import { marked } from 'marked';
 import mammoth from 'mammoth';
-import pdfParse from 'pdf-parse';
+import pdfParse from 'pdf-parse-debugging-disabled';
 import EPub from 'epub2';
 import { Document, DocumentMetadata, DocumentProcessingError } from '../types.js';
 import { generateId } from '../utils/helpers.js';
