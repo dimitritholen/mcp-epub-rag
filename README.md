@@ -35,7 +35,7 @@ A Model Context Protocol (MCP) server that provides document RAG (Retrieval Augm
 ### Using npx (Recommended)
 
 ```bash
-npx @mcp-epub-rag/server
+npx @mcp-epub-rag/server@latest
 ```
 
 ### Installation
@@ -54,7 +54,7 @@ Add this to your MCP client configuration file:
   "mcpServers": {
     "mcp-epub-rag": {
       "command": "npx",
-      "args": ["-y", "@mcp-epub-rag/server"]
+      "args": ["-y", "@mcp-epub-rag/server@latest"]
     }
   }
 }
