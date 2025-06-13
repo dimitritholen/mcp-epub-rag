@@ -90,6 +90,54 @@ npm run build
 npm run dev
 ```
 
+## What Gets Created Automatically
+
+When you configure the server with vectorDbPath: "./vector-db" , it creates:
+
+```
+vector-db/
+├── index.json          # Vector index data
+├── metadata.json       # Document and 
+chunk metadata
+└── [other index files] # Additional Vectra 
+index files
+```
+
+## Persistent Storage
+
+The database automatically:
+
+- Saves metadata after each document addition
+  
+- Persists vectors to disk
+  
+- Loads existing data on restart
+  
+- Maintains document relationships
+  
+## Zero Configuration Required
+  
+  Users don't need to:
+  
+- ❌ Create database schemas
+  
+- ❌ Set up tables or collections
+  
+- ❌ Configure database connections
+  
+- ❌ Manage database files manually
+  
+ ## What Happens During Configuration
+  
+
+1. User provides vectorDbPath in configuration
+2. Server creates the directory automatically
+3. Vector index is initialized
+4. Documents are processed and stored
+5. Database is ready for semantic search
+
+
+
 ## License
 
 MIT License - see LICENSE file for details.
