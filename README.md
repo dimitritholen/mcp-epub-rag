@@ -2,6 +2,26 @@
 
 A Model Context Protocol (MCP) server that provides document RAG (Retrieval Augmented Generation) capabilities for EPUB, PDF, MOBI, DOCX, and Markdown files.
 
+## Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Using npx (Recommended)](#using-npx-recommended)
+  - [Installation](#installation)
+  - [MCP Client Configuration](#mcp-client-configuration)
+- [Configuration](#configuration)
+  - [Configuration Parameters](#configuration-parameters)
+  - [Supported Embedding Models](#supported-embedding-models)
+- [Available Tools](#available-tools)
+- [Supported File Types](#supported-file-types)
+- [Requirements](#requirements)
+- [Development](#development)
+- [What Gets Created Automatically](#what-gets-created-automatically)
+- [Persistent Storage](#persistent-storage)
+- [Zero Configuration Required](#zero-configuration-required)
+- [What Happens During Configuration](#what-happens-during-configuration)
+- [License](#license)
+
 ## Features
 
 - **Multi-format support**: EPUB, PDF, MOBI, DOCX, and Markdown files
@@ -25,6 +45,33 @@ npm install -g @mcp-epub-rag/server
 mcp-epub-rag
 ```
 
+### MCP Client Configuration
+
+Add this to your MCP client configuration file:
+
+```json
+{
+  "mcpServers": {
+    "mcp-epub-rag": {
+      "command": "npx",
+      "args": ["-y", "@mcp-epub-rag/server"]
+    }
+  }
+}
+```
+
+Or if you installed globally:
+
+```json
+{
+  "mcpServers": {
+    "mcp-epub-rag": {
+      "command": "mcp-epub-rag"
+    }
+  }
+}
+```
+
 ## Configuration
 
 The server requires configuration before use. Use the `configure` tool with the following parameters:
@@ -39,6 +86,24 @@ The server requires configuration before use. Use the `configure` tool with the 
   "maxResults": 10
 }
 ```
+
+### Configuration Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `documents` | `string[]` | ✅ Yes | - | Array of file paths or glob patterns to documents |
+| `vectorDbPath` | `string` | ✅ Yes | - | Path where vector database will be stored |
+| `embeddingModel` | `string` | ✅ Yes | - | Hugging Face model for embeddings |
+| `chunkSize` | `number` | ❌ No | `512` | Size of text chunks for processing |
+| `chunkOverlap` | `number` | ❌ No | `50` | Overlap between consecutive chunks |
+| `maxResults` | `number` | ❌ No | `10` | Maximum search results to return |
+
+### Supported Embedding Models
+
+- `Xenova/all-MiniLM-L6-v2` (Recommended - Fast and efficient)
+- `Xenova/all-mpnet-base-v2` (Higher quality, slower)
+- `Xenova/distilbert-base-uncased`
+- Any compatible Hugging Face embedding model
 
 ## Available Tools
 
