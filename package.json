@@ -1,6 +1,6 @@
 {
   "name": "@mcp-epub-rag/server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Model Context Protocol server for document RAG with EPUB, PDF, MOBI, DOCX, and Markdown support",
   "main": "dist/index.js",
   "bin": {
