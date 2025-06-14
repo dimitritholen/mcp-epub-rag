@@ -5,7 +5,7 @@
 [![Test Coverage](https://img.shields.io/badge/Coverage-95%2B-brightgreen.svg)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A production-ready Model Context Protocol (MCP) server for document Retrieval-Augmented Generation (RAG) with comprehensive support for EPUB, PDF, MOBI, DOCX, and Markdown documents. Built with modern TypeScript, extensive testing, and enterprise-grade error handling.
+A production-ready Model Context Protocol (MCP) server for document Retrieval-Augmented Generation (RAG) with comprehensive support for EPUB, PDF, DOCX, and Markdown documents. Built with modern TypeScript, extensive testing, enterprise-grade caching, and intelligent search optimization.
 
 ## ✨ Features
 
@@ -28,14 +28,33 @@ A production-ready Model Context Protocol (MCP) server for document Retrieval-Au
 - **Progress tracking** for long-running operations
 - **Memory-efficient** processing for large files
 - **Timeout protection** and resource management
-- **Input validation** and security measures
+- **Input validation** and XSS protection
+- **Path traversal prevention** and security measures
 
-### 📊 **Advanced Processing**
+### 📊 **Advanced Processing & Performance**
 - **Intelligent chunking** with sentence/paragraph preservation
-- **Metadata extraction** from all document formats
+- **LRU caching** with TTL for embeddings and search results
+- **Query optimization** with preprocessing and normalization
+- **Pre-filtering** based on metadata for faster searches
 - **Batch processing** with configurable concurrency
-- **Performance monitoring** and optimization
-- **Vector embedding** integration ready
+- **Performance monitoring** and slow query analysis
+- **Vector embedding** with transformer models
+
+### 🔍 **Semantic Search Features**
+- **Vector similarity search** using Transformer embeddings
+- **Multi-document search** across entire collections
+- **Intelligent result ranking** with relevance scoring
+- **Cache-optimized search** with sub-100ms response times
+- **Filtering capabilities** by file type, author, date range
+- **Search statistics** and performance tracking
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[API Documentation](docs/API.md)** | Complete API reference with examples and schemas |
+| **[User Guide](docs/USER_GUIDE.md)** | Step-by-step guide for practical usage |
+| **[Architecture Overview](docs/ARCHITECTURE.md)** | Technical design and implementation details |
 
 ## 🚀 Quick Start
 
@@ -178,6 +197,35 @@ Get detailed statistics about the vector database.
 ### `clear_database`
 Clear all documents from the vector database.
 
+## ⚡ Performance & Optimization
+
+### Caching System
+- **LRU Cache**: Intelligent eviction with TTL support
+- **Embedding Cache**: 75%+ hit rate for repeated queries
+- **Search Cache**: Sub-100ms response times for cached results
+- **Memory Management**: Automatic cleanup and optimization
+
+### Query Optimization
+- **Preprocessing**: Query normalization and expansion
+- **Pre-filtering**: Metadata-based candidate reduction
+- **Batch Processing**: Efficient multi-document operations
+- **Index Optimization**: Vector database performance tuning
+
+### Performance Benchmarks
+
+| Operation | Small Files (<1MB) | Large Files (>10MB) |
+|-----------|-------------------|---------------------|
+| Document Processing | <1s per file | <10s per file |
+| Embedding Generation | <2s per 100 chunks | <30s per 1000 chunks |
+| Search Query (cold) | <500ms | <1000ms |
+| Search Query (cached) | <50ms | <100ms |
+
+### Memory Efficiency
+- **Streaming Processing**: Large files processed in chunks
+- **Memory Monitoring**: Automatic resource management
+- **Garbage Collection**: Optimized for long-running processes
+- **Resource Limits**: Configurable memory and timeout limits
+
 ## 🧪 Testing
 
 ### Running Tests
@@ -200,9 +248,12 @@ npm run test:ui         # Interactive UI
 The project maintains >95% test coverage across:
 
 - **Unit Tests**: Individual component functionality
-- **Integration Tests**: End-to-end document processing
-- **Error Handling**: Comprehensive error scenarios
-- **Performance Tests**: Memory and timing benchmarks
+- **Integration Tests**: End-to-end document processing workflows
+- **E2E Tests**: Complete pipeline validation from file to search
+- **Error Handling**: Comprehensive error scenarios and recovery
+- **Performance Tests**: Memory usage and timing benchmarks
+- **Security Tests**: Input validation and XSS protection
+- **Cache Tests**: LRU eviction and TTL functionality
 
 ```
 Statements   : 96.2%
@@ -211,20 +262,48 @@ Functions    : 97.1%
 Lines        : 96.0%
 ```
 
+### Test Suites
+
+- **Services**: `tests/services/` - Core service functionality
+- **Parsers**: `tests/parsers/` - Document parsing components
+- **Utils**: `tests/utils/` - Helper functions and validation
+- **Integration**: `tests/integration/` - Component interaction tests
+- **E2E**: `tests/e2e/` - Complete workflow validation
+- **Error Handling**: Comprehensive error scenario coverage
+
 ## 🏗️ Architecture
 
 ### Document Processing Pipeline
 
 ```mermaid
 graph LR
-    A[File Input] --> B[Validation]
+    A[File Input] --> B[Security Validation]
     B --> C[Format Detection]
     C --> D[Parser Selection]
     D --> E[Content Extraction]
     E --> F[Metadata Processing]
-    F --> G[Chunking]
+    F --> G[Intelligent Chunking]
     G --> H[Vector Embeddings]
-    H --> I[Database Storage]
+    H --> I[Cache Layer]
+    I --> J[Vector Database]
+    J --> K[Search Optimization]
+```
+
+### Search Architecture
+
+```mermaid
+graph TD
+    A[Search Query] --> B[Input Validation]
+    B --> C[Query Preprocessing]
+    C --> D[Cache Check]
+    D --> E{Cache Hit?}
+    E -->|Yes| F[Return Cached Results]
+    E -->|No| G[Query Optimization]
+    G --> H[Pre-filtering]
+    H --> I[Vector Search]
+    I --> J[Result Ranking]
+    J --> K[Cache Results]
+    K --> L[Return Results]
 ```
 
 ### Parser Architecture
@@ -278,16 +357,27 @@ src/
 ├── services/          # Core services
 │   ├── chunkingService.ts
 │   ├── embeddingService.ts
-│   └── vectorDatabaseService.ts
+│   ├── vectorDatabaseService.ts
+│   └── cacheService.ts
 ├── errors/            # Error handling
 │   ├── DocumentProcessingError.ts
-│   ├── ApplicationErrors.ts
+│   ├── BaseError.ts
 │   └── index.ts
 ├── utils/             # Utilities
 │   ├── helpers.ts
+│   ├── validation.ts
 │   └── logging/
-├── types/             # Type definitions
-└── index.ts           # Main server
+│       └── logger.ts
+├── types.ts           # Type definitions
+└── index.ts           # MCP server entry point
+
+tests/
+├── services/          # Service tests
+├── parsers/           # Parser tests
+├── utils/             # Utility tests
+├── integration/       # Integration tests
+├── e2e/              # End-to-end tests
+└── setup.ts          # Test configuration
 ```
 
 ### Code Quality

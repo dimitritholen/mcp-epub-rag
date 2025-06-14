@@ -33,31 +33,58 @@ import {
   sanitizeContent
 } from './utils/helpers.js';
 
+/**
+ * MCP EPUB RAG Server
+ * 
+ * A production-ready Model Context Protocol server that provides document processing
+ * and semantic search capabilities for EPUB, PDF, DOCX, and Markdown files.
+ * 
+ * Features:
+ * - Multi-format document parsing with metadata extraction
+ * - Intelligent text chunking with sentence/paragraph preservation
+ * - Vector embeddings using transformer models (Xenova/transformers)
+ * - Semantic search with caching and query optimization
+ * - Enterprise-grade error handling and security validation
+ * - Performance monitoring and statistics tracking
+ * 
+ * Architecture:
+ * - MCP tools interface for client communication
+ * - Modular service architecture for scalability
+ * - In-memory caching with LRU eviction
+ * - Vector database with Vectra for similarity search
+ * - Comprehensive logging with Pino
+ */
 class MCPEpubRAGServer {
   private server: Server;
   private config: Config | null = null;
-  private documentParser: DocumentParser;
-  private chunkingService: ChunkingService;
-  private embeddingService: EmbeddingService | null = null;
-  private vectorDbService: VectorDatabaseService | null = null;
+  
+  // Core processing services (initialized once, reused across operations)
+  private documentParser: DocumentParser;        // Multi-format document parsing
+  private chunkingService: ChunkingService;      // Intelligent text segmentation
+  private embeddingService: EmbeddingService | null = null;    // Vector embedding generation
+  private vectorDbService: VectorDatabaseService | null = null; // Semantic search and storage
+  
   private isInitialized = false;
 
   constructor() {
+    // Initialize MCP server with tool capabilities
     this.server = new Server(
       {
         name: 'mcp-epub-rag',
-        version: '1.0.0',
+        version: '2.0.0', // Updated to reflect current capabilities
       },
       {
         capabilities: {
-          tools: {},
+          tools: {}, // Tool definitions provided dynamically via setupHandlers
         },
       }
     );
 
+    // Initialize lightweight services that don't require configuration
     this.documentParser = new DocumentParser();
     this.chunkingService = new ChunkingService();
 
+    // Setup MCP request handlers for all available tools
     this.setupHandlers();
   }
 

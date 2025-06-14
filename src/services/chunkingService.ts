@@ -8,26 +8,58 @@ export interface ChunkingOptions {
   preserveParagraphs?: boolean;
 }
 
+/**
+ * Intelligent Text Chunking Service
+ * 
+ * Provides advanced text segmentation algorithms that preserve semantic boundaries
+ * while maintaining optimal chunk sizes for vector embedding and retrieval.
+ * 
+ * Key features:
+ * - Sentence boundary preservation to maintain coherent context
+ * - Paragraph boundary preservation to respect document structure
+ * - Configurable chunk size with intelligent overlap
+ * - Character position tracking for precise source mapping
+ * - Metadata preservation for enhanced search capabilities
+ * 
+ * The chunking algorithm prioritizes readability and semantic coherence over
+ * strict size limits, ensuring that chunks contain meaningful, complete thoughts
+ * rather than arbitrary text fragments.
+ */
 export class ChunkingService {
   private defaultOptions: ChunkingOptions = {
-    chunkSize: 512,
-    chunkOverlap: 50,
-    preserveSentences: true,
-    preserveParagraphs: true
+    chunkSize: 512,           // Optimal size for most transformer models
+    chunkOverlap: 50,         // ~10% overlap to maintain context continuity  
+    preserveSentences: true,  // Avoid breaking sentences mid-thought
+    preserveParagraphs: true  // Respect document structure and logical breaks
   };
 
+  /**
+   * Chunks a document into smaller, semantically coherent segments
+   * 
+   * The chunking process follows a hierarchical approach:
+   * 1. Document is split into paragraphs (if preserveParagraphs enabled)
+   * 2. Each paragraph is processed to create optimally-sized chunks
+   * 3. Sentence boundaries are respected to maintain readability
+   * 4. Overlapping content ensures context continuity between chunks
+   * 5. Precise character positions are tracked for source mapping
+   * 
+   * @param document The document to chunk
+   * @param options Chunking configuration options
+   * @returns Array of document chunks with metadata and position tracking
+   */
   chunkDocument(document: Document, options?: Partial<ChunkingOptions>): DocumentChunk[] {
     const opts = { ...this.defaultOptions, ...options };
     const chunks: DocumentChunk[] = [];
     
-    // Split content into paragraphs first if preserveParagraphs is enabled
+    // Step 1: Split content into paragraphs to preserve document structure
     const paragraphs = opts.preserveParagraphs 
       ? this.splitIntoParagraphs(document.content)
       : [document.content];
     
-    let globalStartIndex = 0;
-    let chunkIndex = 0;
+    let globalStartIndex = 0;  // Track position in original document
+    let chunkIndex = 0;        // Sequential chunk numbering
     
+    // Step 2: Process each paragraph independently to maintain logical boundaries
     for (const paragraph of paragraphs) {
       const paragraphChunks = this.chunkText(
         paragraph,

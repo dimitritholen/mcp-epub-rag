@@ -29,7 +29,18 @@ export const SECURITY_LIMITS = {
 } as const;
 
 /**
- * Validate file path and check if it exists with security protections
+ * Comprehensive file path validation with security protections
+ * 
+ * Validates file paths against common security vulnerabilities:
+ * - Path traversal attacks (../, ..\)
+ * - Null byte injection (\0)
+ * - Excessively long paths (DoS prevention)
+ * - File size limits (resource protection)
+ * - Directory traversal outside allowed base directories
+ * 
+ * @param filePath The file path to validate
+ * @param allowedBaseDir Optional base directory to restrict access
+ * @returns Validation result with detailed status information
  */
 export async function validateFilePath(filePath: string, allowedBaseDir?: string): Promise<{
   isValid: boolean;
@@ -38,7 +49,7 @@ export async function validateFilePath(filePath: string, allowedBaseDir?: string
   error?: string;
 }> {
   try {
-    // Check if path is valid
+    // Basic input validation
     if (!filePath || typeof filePath !== 'string') {
       return {
         isValid: false,
@@ -179,24 +190,44 @@ export function formatDuration(milliseconds: number): string {
 
 /**
  * Sanitize content to prevent XSS and injection attacks
+ * 
+ * Removes potentially dangerous HTML/JavaScript content that could be used
+ * for cross-site scripting (XSS) attacks or code injection:
+ * - Script tags and their contents
+ * - Iframe tags (potential for clickjacking)
+ * - JavaScript: protocol URLs
+ * - HTML event handlers (onclick, onload, etc.)
+ * - Null bytes (path traversal protection)
+ * 
+ * @param content The content string to sanitize
+ * @returns Sanitized content safe for processing and display
  */
 export function sanitizeContent(content: string): string {
   if (!content || typeof content !== 'string') {
     return '';
   }
   
-  // Remove potentially harmful content
+  // Apply multiple layers of security filtering
   return content
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '') // Remove iframe tags
     .replace(/javascript:/gi, '') // Remove javascript: URLs
-    .replace(/on\w+\s*=/gi, '') // Remove event handlers
-    .replace(/\0/g, '') // Remove null bytes
+    .replace(/on\w+\s*=/gi, '') // Remove event handlers (onclick, onload, etc.)
+    .replace(/\0/g, '') // Remove null bytes (path traversal protection)
     .trim();
 }
 
 /**
- * Validate and sanitize search query
+ * Validate and sanitize search queries with comprehensive security checks
+ * 
+ * Ensures search queries are safe and within acceptable limits:
+ * - Input type validation
+ * - Length limits to prevent DoS attacks
+ * - Content sanitization to prevent XSS
+ * - Empty query detection after sanitization
+ * 
+ * @param query The search query string to validate
+ * @returns Validation result with sanitized query or error details
  */
 export function validateSearchQuery(query: string): { isValid: boolean; sanitized: string; error?: string } {
   if (!query || typeof query !== 'string') {

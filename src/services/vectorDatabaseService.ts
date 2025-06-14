@@ -254,6 +254,20 @@ export class VectorDatabaseService {
     }
   }
 
+  /**
+   * Performs semantic search across vectorized documents with caching and optimization
+   * 
+   * This method implements a multi-stage search pipeline:
+   * 1. Cache lookup for repeated queries
+   * 2. Query preprocessing and optimization
+   * 3. Metadata-based pre-filtering (if enabled)
+   * 4. Vector similarity search using embeddings
+   * 5. Result ranking and filtering
+   * 6. Cache storage for future requests
+   * 
+   * @param query Search query with text, filters, and parameters
+   * @returns Promise resolving to ranked search results with relevance scores
+   */
   async search(query: SearchQuery): Promise<SearchResult[]> {
     if (!this.isInitialized || !this.index) {
       throw new VectorDatabaseError('Vector database not initialized', 'search');
@@ -263,10 +277,10 @@ export class VectorDatabaseService {
     this.searchStats.totalSearches++;
 
     try {
-      // Generate cache key for the search query
+      // Step 1: Generate deterministic cache key based on query parameters
       const cacheKey = this.generateSearchCacheKey(query);
       
-      // Try to get cached results first
+      // Step 2: Check cache for previously computed results (30min TTL)
       if (this.enableCache && this.optimizations.enableResultCaching) {
         const cached = this.cache.get<SearchResult[]>(cacheKey);
         if (cached) {
@@ -285,11 +299,11 @@ export class VectorDatabaseService {
         }
       }
 
-      // Optimize query if enabled
+      // Step 3: Apply query optimization (normalization, abbreviation expansion, limits)
       const optimizedQuery = this.optimizations.enableQueryRewriting ? 
         this.optimizeQuery(query) : query;
 
-      // Pre-filter candidates if enabled and filters are present
+      // Step 4: Pre-filter document chunks based on metadata to reduce search space
       let candidateChunks: DocumentChunk[] | null = null;
       if (this.optimizations.enablePrefiltering && optimizedQuery.filters) {
         candidateChunks = this.prefilterChunks(optimizedQuery.filters);
@@ -301,44 +315,47 @@ export class VectorDatabaseService {
         }, 'Pre-filtering applied');
       }
 
-      // Generate embedding for query
+      // Step 5: Generate vector embedding for the search query using transformer model
       const queryEmbedding = await this.embeddingService.generateEmbedding(optimizedQuery.query);
       
-      // Perform vector search with optimized parameters
-      const maxResults = Math.min(optimizedQuery.maxResults || 10, 100); // Cap max results
+      // Step 6: Perform vector similarity search against indexed document chunks
+      const maxResults = Math.min(optimizedQuery.maxResults || 10, 100); // Cap max results for performance
       const searchResults = await (this.index as any).queryItems(
         queryEmbedding, 
+        // Search more candidates than needed to account for filtering and ranking
         candidateChunks ? Math.min(maxResults * 2, candidateChunks.length) : maxResults * 2
       );
       
-      // Convert to SearchResult format with optimized processing
+      // Step 7: Process vector search results into structured SearchResult objects
       const results: SearchResult[] = [];
-      const processedIds = new Set<string>();
+      const processedIds = new Set<string>(); // Prevent duplicate results
       
       for (const result of searchResults) {
-        // Skip duplicates
+        // Skip duplicates that may occur in vector search
         if (processedIds.has(result.item.id)) {
           continue;
         }
         processedIds.add(result.item.id);
 
+        // Retrieve chunk and document metadata from in-memory maps
         const chunk = this.chunks.get(result.item.id);
         const document = chunk ? this.documents.get(chunk.documentId) : null;
         
         if (chunk && document) {
-          // Apply filters if not pre-filtered
+          // Apply additional filtering for chunks not pre-filtered
           if (!candidateChunks || candidateChunks.includes(chunk)) {
             if (this.passesFilters(document, chunk, optimizedQuery.filters)) {
-              // Apply threshold filter
+              // Apply similarity threshold to filter low-quality matches
               if (!optimizedQuery.threshold || result.score >= optimizedQuery.threshold) {
                 results.push({
                   chunk,
                   document,
                   score: result.score,
+                  // Extract the most relevant portion of the chunk for display
                   relevantText: this.extractRelevantText(chunk.content, optimizedQuery.query)
                 });
 
-                // Stop early if we have enough results
+                // Early termination once we have enough high-quality results
                 if (results.length >= maxResults) {
                   break;
                 }
@@ -348,12 +365,12 @@ export class VectorDatabaseService {
         }
       }
       
-      // Sort by score (descending)
+      // Step 8: Sort results by relevance score (highest first)
       const sortedResults = results.sort((a, b) => b.score - a.score);
 
-      // Cache the results if caching is enabled
+      // Step 9: Cache results for future queries (adaptive TTL based on result set size)
       if (this.enableCache && this.optimizations.enableResultCaching && sortedResults.length > 0) {
-        // Set shorter TTL for large result sets to manage memory
+        // Use shorter TTL for large result sets to manage cache memory usage
         const ttl = sortedResults.length > 20 ? 10 * 60 * 1000 : undefined; // 10 minutes for large sets
         this.cache.set(cacheKey, sortedResults, ttl);
       }
