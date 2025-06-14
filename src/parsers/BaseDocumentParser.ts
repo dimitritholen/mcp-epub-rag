@@ -1,5 +1,4 @@
 import { DocumentProcessingError } from '../errors/DocumentProcessingError.js';
-import { Document } from '../types.js';
 
 /**
  * Progress callback for document parsing operations
@@ -28,9 +27,9 @@ export interface ParserOptions {
  */
 export interface ParseResult {
   content: string;
-  title?: string;
-  author?: string;
-  metadata?: Record<string, unknown>;
+  title: string;
+  author: string;
+  metadata: Record<string, unknown>;
   wordCount?: number;
   language?: string;
 }

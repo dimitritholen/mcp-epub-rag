@@ -28,7 +28,9 @@ export class VectorDatabaseError extends BaseError {
     );
     
     this.operation = operation;
-    this.databasePath = databasePath;
+    if (databasePath !== undefined) {
+      this.databasePath = databasePath;
+    }
     
     if (cause) {
       this.cause = cause;
@@ -174,7 +176,9 @@ export class ConfigurationError extends BaseError {
       'high'
     );
     
-    this.configKey = configKey;
+    if (configKey !== undefined) {
+      this.configKey = configKey;
+    }
   }
 
   getUserMessage(): string {
@@ -219,7 +223,9 @@ export class ValidationError extends BaseError {
       'medium'
     );
     
-    this.field = field;
+    if (field !== undefined) {
+      this.field = field;
+    }
     this.value = value;
   }
 

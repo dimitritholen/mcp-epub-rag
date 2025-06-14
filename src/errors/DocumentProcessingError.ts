@@ -88,7 +88,9 @@ export class DocumentProcessingError extends BaseError {
     );
     
     this.filePath = filePath;
-    this.fileType = fileType;
+    if (fileType !== undefined) {
+      this.fileType = fileType;
+    }
     this.processingStage = processingStage;
     
     if (cause) {

@@ -137,7 +137,6 @@ export class ChunkingService {
   private findWordBoundary(text: string, start: number, preferredEnd: number): number {
     // Look for word boundaries near the preferred end
     const searchStart = Math.max(start, preferredEnd - 50);
-    const searchEnd = Math.min(text.length, preferredEnd + 20);
     
     // Find the last whitespace before or at the preferred end
     for (let i = Math.min(preferredEnd, text.length - 1); i >= searchStart; i--) {

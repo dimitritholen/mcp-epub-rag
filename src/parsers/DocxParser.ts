@@ -72,15 +72,15 @@ export class DocxParser extends BaseDocumentParser {
       
       return {
         content,
-        title: metadata.title,
-        author: metadata.author,
+        title: typeof metadata['title'] === 'string' ? metadata['title'] : 'Untitled',
+        author: typeof metadata['author'] === 'string' ? metadata['author'] : 'Unknown',
         metadata: {
           ...metadata,
           filePath,
           fileExtension,
           messages: result.messages?.length || 0,
-          warnings: result.messages?.filter(m => m.type === 'warning').length || 0,
-          errors: result.messages?.filter(m => m.type === 'error').length || 0
+          warnings: result.messages?.filter((m: any) => m.type === 'warning').length || 0,
+          errors: result.messages?.filter((m: any) => m.type === 'error').length || 0
         }
       };
     } catch (error) {
@@ -105,25 +105,7 @@ export class DocxParser extends BaseDocumentParser {
     buffer: Buffer,
     options: ParserOptions
   ): Promise<any> {
-    const mammothOptions = {
-      // Convert to raw text
-      convertImage: mammoth.images.ignoreAll,
-      // Handle styles
-      styleMap: [
-        "p[style-name='Heading 1'] => h1:fresh",
-        "p[style-name='Heading 2'] => h2:fresh",
-        "p[style-name='Heading 3'] => h3:fresh"
-      ],
-      // Include document properties
-      includeDefaultStyleMap: true,
-      // Transform document
-      transformDocument: (document: any) => {
-        // Can add custom transformations here
-        return document;
-      }
-    };
-
-    const parsePromise = mammoth.extractRawText({ buffer }, mammothOptions);
+    const parsePromise = mammoth.extractRawText({ buffer });
     
     if (!options.timeout) {
       return parsePromise;
@@ -168,13 +150,13 @@ export class DocxParser extends BaseDocumentParser {
       const firstLine = lines[0].trim();
       // If the first line looks like a title (not too long, not starting with lowercase)
       if (firstLine.length < 100 && firstLine.length > 0 && /^[A-Z]/.test(firstLine)) {
-        metadata.title = firstLine;
+        metadata['title'] = firstLine;
       }
     }
 
     // Add processing information
     if (result.messages) {
-      metadata.processingMessages = result.messages.map((msg: any) => ({
+      metadata['processingMessages'] = result.messages.map((msg: any) => ({
         type: msg.type,
         message: msg.message
       }));

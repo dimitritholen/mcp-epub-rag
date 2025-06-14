@@ -1,10 +1,18 @@
-import { pipeline, Pipeline } from '@xenova/transformers';
+import { pipeline } from '@xenova/transformers';
 import { DocumentChunk, EmbeddingError } from '../types.js';
+import { CacheService, getGlobalCache } from './cacheService.js';
+import { logger } from '../utils/logging/logger.js';
+import crypto from 'crypto';
 
 export interface EmbeddingOptions {
   modelName: string;
   batchSize: number;
   normalize: boolean;
+  enableCache?: boolean;
+  cacheConfig?: {
+    maxEntries?: number;
+    ttl?: number; // TTL in milliseconds
+  };
 }
 
 export class EmbeddingService {
@@ -12,9 +20,28 @@ export class EmbeddingService {
   private modelName: string;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private cache: CacheService;
+  private enableCache: boolean;
 
   constructor(private options: EmbeddingOptions) {
     this.modelName = options.modelName;
+    this.enableCache = options.enableCache ?? true;
+    
+    // Initialize cache with custom config
+    const cacheConfig = {
+      maxSize: options.cacheConfig?.maxEntries ?? 1000,
+      defaultTtl: options.cacheConfig?.ttl ?? 60 * 60 * 1000, // 1 hour default
+      maxMemory: 50 * 1024 * 1024, // 50MB for embeddings
+      cleanupInterval: 10 * 60 * 1000 // 10 minutes
+    };
+    
+    this.cache = getGlobalCache(cacheConfig);
+    
+    logger.info({
+      modelName: this.modelName,
+      cacheEnabled: this.enableCache,
+      cacheConfig
+    }, 'EmbeddingService initialized');
   }
 
   async initialize(): Promise<void> {
@@ -50,6 +77,9 @@ export class EmbeddingService {
       this.initializationPromise = null;
       throw new EmbeddingError(
         `Failed to initialize embedding model: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        this.modelName,
+        'initialization',
+        {},
         error instanceof Error ? error : undefined
       );
     }
@@ -57,9 +87,24 @@ export class EmbeddingService {
 
   async generateEmbedding(text: string): Promise<number[]> {
     await this.initialize();
+
+    // Generate cache key from text content and model name
+    const cacheKey = this.generateCacheKey(text);
+    
+    // Try to get from cache first
+    if (this.enableCache) {
+      const cached = this.cache.get<number[]>(cacheKey);
+      if (cached) {
+        logger.debug({ 
+          textLength: text.length, 
+          cacheKey: cacheKey.substring(0, 16) + '...'
+        }, 'Embedding cache hit');
+        return cached;
+      }
+    }
     
     if (!this.pipeline) {
-      throw new EmbeddingError('Embedding pipeline not initialized');
+      throw new EmbeddingError('Embedding pipeline not initialized', this.modelName, 'embedding');
     }
 
     try {
@@ -67,7 +112,7 @@ export class EmbeddingService {
       const cleanText = this.preprocessText(text);
       
       if (cleanText.length === 0) {
-        throw new EmbeddingError('Empty text provided for embedding');
+        throw new EmbeddingError('Empty text provided for embedding', this.modelName, 'embedding');
       }
 
       // Generate embedding
@@ -83,17 +128,30 @@ export class EmbeddingService {
       } else if (result.data) {
         embedding = Array.from(result.data);
       } else {
-        throw new EmbeddingError('Unexpected embedding result format');
+        throw new EmbeddingError('Unexpected embedding result format', this.modelName, 'embedding');
       }
 
       if (embedding.length === 0) {
-        throw new EmbeddingError('Generated embedding is empty');
+        throw new EmbeddingError('Generated embedding is empty', this.modelName, 'embedding');
+      }
+
+      // Cache the result
+      if (this.enableCache) {
+        this.cache.set(cacheKey, embedding);
+        logger.debug({ 
+          textLength: text.length,
+          embeddingDimension: embedding.length,
+          cacheKey: cacheKey.substring(0, 16) + '...'
+        }, 'Embedding cached');
       }
 
       return embedding;
     } catch (error) {
       throw new EmbeddingError(
         `Failed to generate embedding: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        this.modelName,
+        'embedding',
+        {},
         error instanceof Error ? error : undefined
       );
     }
@@ -103,7 +161,7 @@ export class EmbeddingService {
     await this.initialize();
     
     if (!this.pipeline) {
-      throw new EmbeddingError('Embedding pipeline not initialized');
+      throw new EmbeddingError('Embedding pipeline not initialized', this.modelName, 'batch_processing');
     }
 
     const embeddings: number[][] = [];
@@ -141,7 +199,7 @@ export class EmbeddingService {
       // Add embeddings to chunks
       const embeddedChunks = chunks.map((chunk, index) => ({
         ...chunk,
-        embedding: embeddings[index]
+        embedding: embeddings[index] ?? []
       }));
 
       console.log('Embeddings generated successfully');
@@ -149,6 +207,9 @@ export class EmbeddingService {
     } catch (error) {
       throw new EmbeddingError(
         `Failed to embed chunks: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        this.modelName,
+        'batch_processing',
+        {},
         error instanceof Error ? error : undefined
       );
     }
@@ -212,6 +273,70 @@ export class EmbeddingService {
     };
   }
 
+  /**
+   * Generate cache key for text content
+   */
+  private generateCacheKey(text: string): string {
+    const hash = crypto.createHash('sha256');
+    hash.update(`${this.modelName}:${text}`);
+    return `embedding:${hash.digest('hex')}`;
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats() {
+    if (!this.enableCache) {
+      return null;
+    }
+    return this.cache.getStats();
+  }
+
+  /**
+   * Clear embedding cache
+   */
+  clearCache(): void {
+    if (this.enableCache) {
+      this.cache.invalidatePattern(/^embedding:/);
+      logger.info('Embedding cache cleared');
+    }
+  }
+
+  /**
+   * Preload embeddings for commonly used texts
+   */
+  async preloadEmbeddings(texts: string[]): Promise<void> {
+    if (!this.enableCache) {
+      return;
+    }
+
+    logger.info({ textCount: texts.length }, 'Preloading embeddings');
+    
+    const uncachedTexts: string[] = [];
+    for (const text of texts) {
+      const cacheKey = this.generateCacheKey(text);
+      if (!this.cache.has(cacheKey)) {
+        uncachedTexts.push(text);
+      }
+    }
+
+    if (uncachedTexts.length > 0) {
+      await this.generateEmbeddings(uncachedTexts);
+      logger.info({ 
+        preloadedCount: uncachedTexts.length,
+        cachedCount: texts.length - uncachedTexts.length
+      }, 'Embeddings preloaded');
+    }
+  }
+
+  /**
+   * Get cache hit rate for performance monitoring
+   */
+  getCacheHitRate(): number {
+    const stats = this.getCacheStats();
+    return stats ? stats.hitRate : 0;
+  }
+
   // Cleanup resources
   async dispose(): Promise<void> {
     if (this.pipeline) {
@@ -221,5 +346,10 @@ export class EmbeddingService {
     }
     this.isInitialized = false;
     this.initializationPromise = null;
+    
+    logger.info({
+      modelName: this.modelName,
+      cacheStats: this.getCacheStats()
+    }, 'EmbeddingService disposed');
   }
 }

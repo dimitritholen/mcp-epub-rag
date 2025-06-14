@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { Document, DocumentMetadata } from '../types/index.js';
+import { Document, DocumentMetadata } from '../types.js';
 import { DocumentProcessingError } from '../errors/index.js';
 import { generateId } from '../utils/helpers.js';
 import { logger, trackPerformance } from '../utils/logging/logger.js';
@@ -163,7 +163,7 @@ export class DocumentParser {
         `Failed to parse document: ${error instanceof Error ? error.message : 'Unknown error'}`,
         filePath,
         'parsing',
-        path.extname(filePath).slice(1),
+        path.extname(filePath).slice(1) || 'unknown',
         {},
         error instanceof Error ? error : undefined
       );
@@ -192,23 +192,26 @@ export class DocumentParser {
 
     logger.info({
       fileCount: filePaths.length,
-      files: filePaths.map(fp => path.basename(fp))
+      files: filePaths.map(fp => path.basename(fp) || 'unknown')
     }, 'Starting batch document parsing');
 
     for (let i = 0; i < filePaths.length; i++) {
       const filePath = filePaths[i];
+      
+      if (!filePath) {
+        continue;
+      }
       
       try {
         // Update overall progress
         options.progressCallback?.({
           stage: 'batch-processing',
           percentage: (i / filePaths.length) * 100,
-          message: `Processing file ${i + 1} of ${filePaths.length}: ${path.basename(filePath)}`
+          message: `Processing file ${i + 1} of ${filePaths.length}: ${path.basename(filePath) || 'unknown'}`
         });
 
         const document = await this.parseDocument(filePath, {
-          ...options,
-          progressCallback: undefined // Don't pass individual progress for batch operations
+          ...options
         });
         
         successful.push(document);
@@ -219,7 +222,7 @@ export class DocumentParser {
               `Batch parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
               filePath,
               'parsing',
-              path.extname(filePath).slice(1),
+              path.extname(filePath).slice(1) || 'unknown',
               {},
               error instanceof Error ? error : undefined
             );

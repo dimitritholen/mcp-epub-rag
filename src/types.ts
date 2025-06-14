@@ -279,8 +279,8 @@ export interface HealthStatus {
   errors?: string[];
 }
 
-// Export all error types from the errors module
-export type { 
+// Re-export error classes and types from the errors module
+export { 
   BaseError, 
   DocumentProcessingError,
   VectorDatabaseError,

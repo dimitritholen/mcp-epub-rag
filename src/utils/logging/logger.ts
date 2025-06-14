@@ -17,7 +17,7 @@ export interface LoggerConfig {
 export function createLogger(config: LoggerConfig = {}): pino.Logger {
   const {
     level = 'info',
-    environment = process.env.NODE_ENV as 'development' | 'production' | 'test' || 'development',
+    environment = (process.env['NODE_ENV'] as 'development' | 'production' | 'test') || 'development',
     enablePrettyPrint = environment === 'development',
     logFile
   } = config;
@@ -27,8 +27,10 @@ export function createLogger(config: LoggerConfig = {}): pino.Logger {
     name: 'mcp-epub-rag',
     timestamp: pino.stdTimeFunctions.isoTime,
     formatters: {
-      level: (label) => ({ level: label }),
-      error: (error) => {
+      level: (label) => ({ level: label })
+    },
+    serializers: {
+      error: (error: any) => {
         if (error instanceof BaseError) {
           return {
             name: error.name,

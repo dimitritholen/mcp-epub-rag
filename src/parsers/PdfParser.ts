@@ -81,8 +81,8 @@ export class PdfParser extends BaseDocumentParser {
       
       return {
         content,
-        title: metadata.title,
-        author: metadata.author,
+        title: typeof metadata['title'] === 'string' ? metadata['title'] : 'Untitled',
+        author: typeof metadata['author'] === 'string' ? metadata['author'] : 'Unknown',
         metadata: {
           ...metadata,
           pageCount: data.numpages,
@@ -159,14 +159,14 @@ export class PdfParser extends BaseDocumentParser {
     const metadata: Record<string, unknown> = {};
     
     if (data.info) {
-      metadata.title = data.info.Title || '';
-      metadata.author = data.info.Author || '';
-      metadata.subject = data.info.Subject || '';
-      metadata.keywords = data.info.Keywords || '';
-      metadata.creator = data.info.Creator || '';
-      metadata.producer = data.info.Producer || '';
-      metadata.creationDate = data.info.CreationDate || '';
-      metadata.modificationDate = data.info.ModDate || '';
+      metadata['title'] = data.info['Title'] || '';
+      metadata['author'] = data.info['Author'] || '';
+      metadata['subject'] = data.info['Subject'] || '';
+      metadata['keywords'] = data.info['Keywords'] || '';
+      metadata['creator'] = data.info['Creator'] || '';
+      metadata['producer'] = data.info['Producer'] || '';
+      metadata['creationDate'] = data.info['CreationDate'] || '';
+      metadata['modificationDate'] = data.info['ModDate'] || '';
     }
 
     return metadata;

@@ -1,5 +1,4 @@
 import fs from 'fs-extra';
-import path from 'path';
 import { marked } from 'marked';
 import { parse as parseHtml } from 'node-html-parser';
 import { BaseDocumentParser, ParserOptions, ParseResult } from './BaseDocumentParser.js';
@@ -66,8 +65,8 @@ export class MarkdownParser extends BaseDocumentParser {
       
       return {
         content: plainText,
-        title,
-        author: metadata.author as string,
+        title: title || 'Untitled',
+        author: typeof metadata['author'] === 'string' ? metadata['author'] : 'Unknown',
         metadata: {
           ...metadata,
           originalMarkdown: options.preserveFormatting ? markdownContent : undefined,
@@ -113,6 +112,10 @@ export class MarkdownParser extends BaseDocumentParser {
 
     const [, frontmatterYaml, markdownContent] = match;
     
+    if (!frontmatterYaml) {
+      return { content, metadata: {} };
+    }
+    
     try {
       // Simple YAML-like parsing for common frontmatter fields
       const metadata: Record<string, unknown> = {};
@@ -133,7 +136,7 @@ export class MarkdownParser extends BaseDocumentParser {
         metadata[key] = cleanValue;
       }
       
-      return { content: markdownContent, metadata };
+      return { content: markdownContent || content, metadata };
     } catch (error) {
       // If frontmatter parsing fails, return original content without metadata
       return { content, metadata: {} };
@@ -142,8 +145,8 @@ export class MarkdownParser extends BaseDocumentParser {
 
   private extractTitle(content: string, metadata: Record<string, unknown>): string | undefined {
     // First try to get title from frontmatter
-    if (metadata.title && typeof metadata.title === 'string') {
-      return metadata.title;
+    if (metadata['title'] && typeof metadata['title'] === 'string') {
+      return metadata['title'];
     }
 
     // Then try to extract from first heading
@@ -155,10 +158,10 @@ export class MarkdownParser extends BaseDocumentParser {
     return undefined;
   }
 
-  private async convertToPlainText(markdownContent: string, options: ParserOptions): Promise<string> {
+  private async convertToPlainText(markdownContent: string, _options: ParserOptions): Promise<string> {
     try {
       // Configure marked options
-      const markedOptions: marked.MarkedOptions = {
+      const markedOptions = {
         breaks: true,
         gfm: true,
         sanitize: false,
