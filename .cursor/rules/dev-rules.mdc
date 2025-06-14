@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## CODE QUALITY 
+
+- **ALWAYS** maintian >95% code coverage
+- **ALWAYS** use up-to-date versions
+- **ALWAYS** fix ALL linting errors and warnings
+- **ALWAYS** split up *.ts files longer than 200 lines
+- **ALWAYS** run the entire test suite after each task

@@ -10,7 +10,6 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import path from 'path';
-import fs from 'fs-extra';
 
 import { DocumentParser } from './parsers/documentParser.js';
 import { ChunkingService } from './services/chunkingService.js';
@@ -19,19 +18,19 @@ import { VectorDatabaseService } from './services/vectorDatabaseService.js';
 import {
   Config,
   ConfigSchema,
-  SearchToolArgs,
-  AddDocumentsToolArgs,
-  ListDocumentsToolArgs,
-  DocumentProcessingError,
-  VectorDatabaseError,
-  EmbeddingError
+  SearchToolArgsSchema,
+  AddDocumentsToolArgsSchema,
+  ListDocumentsToolArgsSchema
 } from './types.js';
 import {
   validateFilePath,
   isSupportedFileType,
   formatFileSize,
   formatDuration,
-  getCurrentTimestamp
+  getCurrentTimestamp,
+  SECURITY_LIMITS,
+  validateSearchQuery,
+  sanitizeContent
 } from './utils/helpers.js';
 
 class MCPEpubRAGServer {
@@ -191,11 +190,11 @@ class MCPEpubRAGServer {
           case 'configure':
             return await this.handleConfigure(args);
           case 'search':
-            return await this.handleSearch(args as unknown as SearchToolArgs);
+            return await this.handleSearch(args);
           case 'add_documents':
-            return await this.handleAddDocuments(args as unknown as AddDocumentsToolArgs);
+            return await this.handleAddDocuments(args);
           case 'list_documents':
-            return await this.handleListDocuments(args as unknown as ListDocumentsToolArgs);
+            return await this.handleListDocuments(args);
           case 'get_stats':
             return await this.handleGetStats();
           case 'clear_database':
@@ -221,6 +220,11 @@ class MCPEpubRAGServer {
     try {
       // Validate configuration
       this.config = ConfigSchema.parse(args);
+      
+      // Validate batch size
+      if (this.config.documents.length > SECURITY_LIMITS.MAX_BATCH_SIZE) {
+        throw new Error(`Too many documents (max ${SECURITY_LIMITS.MAX_BATCH_SIZE})`);
+      }
       
       // Validate document paths
       const invalidPaths: string[] = [];
@@ -276,91 +280,142 @@ class MCPEpubRAGServer {
     }
   }
 
-  private async handleSearch(args: SearchToolArgs) {
+  private async handleSearch(args: unknown) {
     this.ensureInitialized();
     
-    if (!args.query?.trim()) {
-      throw new McpError(ErrorCode.InvalidParams, 'Query cannot be empty');
-    }
-    
-    const startTime = Date.now();
-    const results = await this.vectorDbService!.search({
-      query: args.query,
-      maxResults: args.maxResults || this.config!.maxResults,
-      threshold: args.threshold,
-      filters: {
-        fileTypes: args.fileTypes
+    try {
+      // Validate arguments using Zod schema
+      const validatedArgs = SearchToolArgsSchema.parse(args);
+      
+      // Additional query validation and sanitization
+      const queryValidation = validateSearchQuery(validatedArgs.query);
+      if (!queryValidation.isValid) {
+        throw new McpError(ErrorCode.InvalidParams, queryValidation.error || 'Invalid query');
       }
-    });
-    
-    const searchTime = Date.now() - startTime;
-    
-    const resultText = results.length > 0 
-      ? results.map((result, index) => 
-          `**Result ${index + 1}** (Score: ${result.score.toFixed(3)})\n` +
-          `Document: ${result.document.title}\n` +
-          `File: ${path.basename(result.document.metadata.filePath)}\n` +
-          `Content: ${result.relevantText}\n`
-        ).join('\n---\n\n')
-      : 'No results found.';
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Search Results for: "${args.query}"\n\n` +
-                `Found ${results.length} results in ${searchTime}ms\n\n` +
-                resultText
+      
+      // Validate maxResults if provided
+      if (validatedArgs.maxResults && validatedArgs.maxResults > SECURITY_LIMITS.MAX_BATCH_SIZE) {
+        throw new McpError(ErrorCode.InvalidParams, `Max results cannot exceed ${SECURITY_LIMITS.MAX_BATCH_SIZE}`);
+      }
+      
+      const startTime = Date.now();
+      const results = await this.vectorDbService!.search({
+        query: queryValidation.sanitized,
+        maxResults: validatedArgs.maxResults || this.config!.maxResults,
+        threshold: validatedArgs.threshold,
+        filters: {
+          fileTypes: validatedArgs.fileTypes
         }
-      ]
-    };
+      });
+      
+      const searchTime = Date.now() - startTime;
+      
+      const resultText = results.length > 0 
+        ? results.map((result, index) => 
+            `**Result ${index + 1}** (Score: ${result.score.toFixed(3)})\n` +
+            `Document: ${sanitizeContent(result.document.title)}\n` +
+            `File: ${path.basename(result.document.metadata.filePath)}\n` +
+            `Content: ${sanitizeContent(result.relevantText)}\n`
+          ).join('\n---\n\n')
+        : 'No results found.';
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Search Results for: "${sanitizeContent(queryValidation.sanitized)}"\n\n` +
+                  `Found ${results.length} results in ${searchTime}ms\n\n` +
+                  resultText
+          }
+        ]
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new McpError(ErrorCode.InvalidParams, 
+          `Validation failed: ${error.errors.map(e => e.message).join(', ')}`);
+      }
+      throw error;
+    }
   }
 
-  private async handleAddDocuments(args: AddDocumentsToolArgs) {
+  private async handleAddDocuments(args: unknown) {
     this.ensureInitialized();
     
-    const results = await this.processDocuments(args.filePaths);
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Document Addition Results:\n\n` +
-                `- Successfully processed: ${results.successful}\n` +
-                `- Failed: ${results.failed}\n` +
-                `- Total chunks added: ${results.totalChunks}\n` +
-                `- Processing time: ${formatDuration(results.processingTime)}`
-        }
-      ]
-    };
+    try {
+      // Validate arguments using Zod schema
+      const validatedArgs = AddDocumentsToolArgsSchema.parse(args);
+      
+      // Validate batch size
+      if (validatedArgs.filePaths.length > SECURITY_LIMITS.MAX_BATCH_SIZE) {
+        throw new McpError(ErrorCode.InvalidParams, 
+          `Too many files (max ${SECURITY_LIMITS.MAX_BATCH_SIZE})`);
+      }
+      
+      const results = await this.processDocuments(validatedArgs.filePaths);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Document Addition Results:\n\n` +
+                  `- Successfully processed: ${results.successful}\n` +
+                  `- Failed: ${results.failed}\n` +
+                  `- Total chunks added: ${results.totalChunks}\n` +
+                  `- Processing time: ${formatDuration(results.processingTime)}`
+          }
+        ]
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new McpError(ErrorCode.InvalidParams, 
+          `Validation failed: ${error.errors.map(e => e.message).join(', ')}`);
+      }
+      throw error;
+    }
   }
 
-  private async handleListDocuments(args: ListDocumentsToolArgs) {
+  private async handleListDocuments(args: unknown) {
     this.ensureInitialized();
     
-    const documents = await this.vectorDbService!.getDocuments();
-    const filteredDocs = args.fileType 
-      ? documents.filter(doc => doc.metadata.fileType === args.fileType)
-      : documents;
-    
-    const docList = filteredDocs.map(doc => 
-      `- **${doc.title}**\n` +
-      `  File: ${path.basename(doc.metadata.filePath)}\n` +
-      `  Type: ${doc.metadata.fileType}\n` +
-      `  Size: ${formatFileSize(doc.metadata.fileSize)}\n` +
-      `  Chunks: ${doc.chunks.length}\n` +
-      `  Modified: ${doc.metadata.lastModified.toLocaleDateString()}`
-    ).join('\n\n');
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Documents in Database (${filteredDocs.length} total):\n\n` +
-                (docList || 'No documents found.')
-        }
-      ]
-    };
+    try {
+      // Validate arguments using Zod schema
+      const validatedArgs = ListDocumentsToolArgsSchema.parse(args);
+      
+      const documents = await this.vectorDbService!.getDocuments();
+      const filteredDocs = validatedArgs.fileType 
+        ? documents.filter(doc => doc.metadata.fileType === validatedArgs.fileType)
+        : documents;
+      
+      // Apply limit if specified
+      const limitedDocs = validatedArgs.limit 
+        ? filteredDocs.slice(validatedArgs.offset || 0, (validatedArgs.offset || 0) + validatedArgs.limit)
+        : filteredDocs;
+      
+      const docList = limitedDocs.map(doc => 
+        `- **${sanitizeContent(doc.title)}**\n` +
+        `  File: ${path.basename(doc.metadata.filePath)}\n` +
+        `  Type: ${doc.metadata.fileType}\n` +
+        `  Size: ${formatFileSize(doc.metadata.fileSize)}\n` +
+        `  Chunks: ${doc.chunks.length}\n` +
+        `  Modified: ${doc.metadata.lastModified.toLocaleDateString()}`
+      ).join('\n\n');
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Documents in Database (${limitedDocs.length}${validatedArgs.limit ? ` of ${filteredDocs.length}` : ''} total):\n\n` +
+                  (docList || 'No documents found.')
+          }
+        ]
+      };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new McpError(ErrorCode.InvalidParams, 
+          `Validation failed: ${error.errors.map(e => e.message).join(', ')}`);
+      }
+      throw error;
+    }
   }
 
   private async handleGetStats() {

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__taskmaster-ai__get_tasks",
+      "Bash(npm audit:*)",
+      "Bash(npm i:*)",
+      "Bash(npm outdated)",
+      "Bash(find:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run type-check:*)"
+    ],
+    "deny": []
+  }
+}

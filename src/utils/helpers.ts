@@ -17,9 +17,21 @@ export function generateShortId(): string {
 }
 
 /**
- * Validate file path and check if it exists
+ * Security limits for input validation
  */
-export async function validateFilePath(filePath: string): Promise<{
+export const SECURITY_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100MB
+  MAX_QUERY_LENGTH: 1000,
+  MAX_BATCH_SIZE: 50,
+  MAX_PATH_LENGTH: 260,
+  MAX_FILENAME_LENGTH: 255,
+  TIMEOUT_MS: 30000
+} as const;
+
+/**
+ * Validate file path and check if it exists with security protections
+ */
+export async function validateFilePath(filePath: string, allowedBaseDir?: string): Promise<{
   isValid: boolean;
   exists: boolean;
   isFile: boolean;
@@ -36,8 +48,39 @@ export async function validateFilePath(filePath: string): Promise<{
       };
     }
 
-    // Normalize path
-    const normalizedPath = path.resolve(filePath);
+    // Check path length
+    if (filePath.length > SECURITY_LIMITS.MAX_PATH_LENGTH) {
+      return {
+        isValid: false,
+        exists: false,
+        isFile: false,
+        error: 'File path too long'
+      };
+    }
+
+    // Check for null bytes (directory traversal protection)
+    if (filePath.includes('\0')) {
+      return {
+        isValid: false,
+        exists: false,
+        isFile: false,
+        error: 'Invalid characters in path'
+      };
+    }
+
+    // Normalize and resolve path to prevent directory traversal
+    const normalizedPath = path.resolve(path.normalize(filePath));
+    
+    // Check against allowed base directory if provided
+    const baseDir = allowedBaseDir ? path.resolve(allowedBaseDir) : process.cwd();
+    if (!normalizedPath.startsWith(baseDir)) {
+      return {
+        isValid: false,
+        exists: false,
+        isFile: false,
+        error: 'Path outside allowed directory'
+      };
+    }
     
     // Check if file exists
     const exists = await fs.pathExists(normalizedPath);
@@ -53,6 +96,16 @@ export async function validateFilePath(filePath: string): Promise<{
     // Check if it's a file (not directory)
     const stats = await fs.stat(normalizedPath);
     const isFile = stats.isFile();
+
+    // Check file size
+    if (isFile && stats.size > SECURITY_LIMITS.MAX_FILE_SIZE) {
+      return {
+        isValid: false,
+        exists: true,
+        isFile: true,
+        error: `File too large (max ${formatFileSize(SECURITY_LIMITS.MAX_FILE_SIZE)})`
+      };
+    }
 
     return {
       isValid: true,
@@ -117,14 +170,78 @@ export function formatDuration(milliseconds: number): string {
 }
 
 /**
+ * Sanitize content to prevent XSS and injection attacks
+ */
+export function sanitizeContent(content: string): string {
+  if (!content || typeof content !== 'string') {
+    return '';
+  }
+  
+  // Remove potentially harmful content
+  return content
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '') // Remove iframe tags
+    .replace(/javascript:/gi, '') // Remove javascript: URLs
+    .replace(/on\w+\s*=/gi, '') // Remove event handlers
+    .replace(/\0/g, '') // Remove null bytes
+    .trim();
+}
+
+/**
+ * Validate and sanitize search query
+ */
+export function validateSearchQuery(query: string): { isValid: boolean; sanitized: string; error?: string } {
+  if (!query || typeof query !== 'string') {
+    return {
+      isValid: false,
+      sanitized: '',
+      error: 'Query must be a non-empty string'
+    };
+  }
+
+  if (query.length > SECURITY_LIMITS.MAX_QUERY_LENGTH) {
+    return {
+      isValid: false,
+      sanitized: '',
+      error: `Query too long (max ${SECURITY_LIMITS.MAX_QUERY_LENGTH} characters)`
+    };
+  }
+
+  const sanitized = sanitizeContent(query.trim());
+  
+  if (!sanitized) {
+    return {
+      isValid: false,
+      sanitized: '',
+      error: 'Query contains no valid content'
+    };
+  }
+
+  return {
+    isValid: true,
+    sanitized
+  };
+}
+
+/**
  * Sanitize filename for safe storage
  */
 export function sanitizeFilename(filename: string): string {
+  if (!filename || typeof filename !== 'string') {
+    return 'unnamed_file';
+  }
+
+  // Check length
+  if (filename.length > SECURITY_LIMITS.MAX_FILENAME_LENGTH) {
+    filename = filename.substring(0, SECURITY_LIMITS.MAX_FILENAME_LENGTH);
+  }
+
   return filename
     .replace(/[^a-z0-9.-]/gi, '_') // Replace invalid characters with underscore
     .replace(/_{2,}/g, '_') // Replace multiple underscores with single
     .replace(/^_|_$/g, '') // Remove leading/trailing underscores
-    .toLowerCase();
+    .replace(/^\.|\.$/g, '') // Remove leading/trailing dots
+    .toLowerCase() || 'unnamed_file';
 }
 
 /**
