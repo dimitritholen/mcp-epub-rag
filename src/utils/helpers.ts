@@ -107,11 +107,19 @@ export async function validateFilePath(filePath: string, allowedBaseDir?: string
       };
     }
 
+    if (!isFile) {
+      return {
+        isValid: false,
+        exists: true,
+        isFile: false,
+        error: 'Path is not a file'
+      };
+    }
+
     return {
       isValid: true,
       exists: true,
-      isFile,
-      error: isFile ? undefined : 'Path is not a file'
+      isFile: true
     };
   } catch (error) {
     return {
@@ -381,7 +389,7 @@ export function calculatePercentage(current: number, total: number): number {
  * Check if running in development mode
  */
 export function isDevelopment(): boolean {
-  return process.env.NODE_ENV === 'development';
+  return process.env['NODE_ENV'] === 'development';
 }
 
 /**

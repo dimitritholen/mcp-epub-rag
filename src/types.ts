@@ -287,9 +287,4 @@ export type {
   EmbeddingError,
   ConfigurationError,
   ValidationError 
-} from '@/errors/index';
-
-// Legacy exports for backward compatibility
-export { DocumentProcessingError as DocumentProcessingError } from '@/errors/index';
-export { VectorDatabaseError as VectorDatabaseError } from '@/errors/index';
-export { EmbeddingError as EmbeddingError } from '@/errors/index';
+} from './errors/index.js';

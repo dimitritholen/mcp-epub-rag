@@ -299,14 +299,20 @@ class MCPEpubRAGServer {
       }
       
       const startTime = Date.now();
-      const results = await this.vectorDbService!.search({
+      const searchQuery: any = {
         query: queryValidation.sanitized,
-        maxResults: validatedArgs.maxResults || this.config!.maxResults,
-        threshold: validatedArgs.threshold,
-        filters: {
-          fileTypes: validatedArgs.fileTypes
-        }
-      });
+        maxResults: validatedArgs.maxResults || this.config!.maxResults
+      };
+      
+      if (validatedArgs.threshold !== undefined) {
+        searchQuery.threshold = validatedArgs.threshold;
+      }
+      
+      if (validatedArgs.fileTypes) {
+        searchQuery.filters = { fileTypes: validatedArgs.fileTypes };
+      }
+      
+      const results = await this.vectorDbService!.search(searchQuery);
       
       const searchTime = Date.now() - startTime;
       

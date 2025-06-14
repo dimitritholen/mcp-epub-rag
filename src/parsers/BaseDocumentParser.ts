@@ -1,5 +1,5 @@
-import { DocumentProcessingError } from '@/errors/DocumentProcessingError';
-import { Document } from '../../types/index.js';
+import { DocumentProcessingError } from '../errors/DocumentProcessingError.js';
+import { Document } from '../types.js';
 
 /**
  * Progress callback for document parsing operations
